@@ -1,0 +1,1393 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="StreamBridge converts magnets, .torrent files, and video URLs into direct download links." />
+    <meta name="color-scheme" content="dark" />
+    <title>StreamBridge — Universal media bridge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-base: #06070b;
+        --bg-elev: #0c0e15;
+        --bg-card: rgba(255, 255, 255, 0.035);
+        --bg-card-strong: rgba(255, 255, 255, 0.06);
+        --bg-input: rgba(0, 0, 0, 0.4);
+
+        --border: rgba(255, 255, 255, 0.08);
+        --border-strong: rgba(255, 255, 255, 0.16);
+        --border-focus: #8b6dff;
+
+        --text: #ecedf2;
+        --text-2: #b9bcc7;
+        --muted: #7e828f;
+
+        --accent: #8b6dff;
+        --accent-2: #38d6ff;
+        --accent-3: #ff7ec5;
+
+        --success: #34d399;
+        --warn: #fbbf24;
+        --error: #fb7185;
+        --info: #38d6ff;
+
+        --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.35);
+        --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.5);
+
+        --r-sm: 10px;
+        --r-md: 14px;
+        --r-lg: 20px;
+        --r-pill: 999px;
+
+        --dur-fast: 0.15s;
+        --dur: 0.25s;
+      }
+
+      * { box-sizing: border-box; }
+
+      ::selection { background: rgba(139, 109, 255, 0.4); color: #fff; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        background: var(--bg-base);
+        color: var(--text);
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-feature-settings: "cv11", "ss01";
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      body { overflow-x: hidden; }
+
+      .backdrop {
+        position: fixed;
+        inset: -10%;
+        z-index: -1;
+        background:
+          radial-gradient(55% 38% at 18% 8%, rgba(139, 109, 255, 0.32), transparent 65%),
+          radial-gradient(45% 30% at 85% -5%, rgba(56, 214, 255, 0.22), transparent 65%),
+          radial-gradient(40% 28% at 92% 88%, rgba(255, 126, 197, 0.16), transparent 65%),
+          transparent;
+        filter: blur(50px) saturate(120%);
+        animation: drift 24s ease-in-out infinite alternate;
+        pointer-events: none;
+        mix-blend-mode: screen;
+      }
+      .backdrop::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+        background-size: 64px 64px;
+        mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 80%);
+      }
+
+      @keyframes drift {
+        0% { transform: translate3d(0, 0, 0) scale(1); }
+        100% { transform: translate3d(2%, -1%, 0) scale(1.04); }
+      }
+
+      .bg-video {
+        position: fixed;
+        inset: 0;
+        z-index: -3;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        filter: blur(2px) brightness(0.42) saturate(118%) contrast(105%);
+        transform: scale(1.04);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 1.2s ease;
+      }
+      .bg-video.ready { opacity: 1; }
+      .bg-video.hidden { display: none; }
+
+      .bg-vignette {
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        pointer-events: none;
+        background:
+          radial-gradient(ellipse 95% 70% at 50% 0%, transparent 0%, rgba(6, 7, 11, 0.45) 60%, rgba(6, 7, 11, 0.85) 100%),
+          linear-gradient(180deg, rgba(6, 7, 11, 0.35) 0%, rgba(6, 7, 11, 0.6) 100%);
+      }
+      .bg-vignette::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        opacity: 0.18;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      }
+
+      .head-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      a { color: var(--accent-2); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+      :focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+      .input:focus-visible,
+      .btn:focus-visible,
+      .btn-icon:focus-visible,
+      .tab:focus-visible,
+      .chip:focus-visible {
+        outline-offset: 3px;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0,0,0,0);
+        white-space: nowrap; border: 0;
+      }
+
+      .skip-link {
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        padding: 8px 14px;
+        background: var(--accent);
+        color: #fff;
+        border-radius: var(--r-sm);
+        font-weight: 600;
+        transform: translateY(-200%);
+        transition: transform var(--dur);
+        z-index: 100;
+      }
+      .skip-link:focus {
+        transform: translateY(0);
+        text-decoration: none;
+      }
+
+      header.brand {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+        background: rgba(6, 7, 11, 0.55);
+        border-bottom: 1px solid var(--border);
+      }
+      .brand-inner {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: inherit;
+      }
+      .logo-mark {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: conic-gradient(from 220deg at 50% 50%, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
+        display: grid;
+        place-items: center;
+        position: relative;
+        box-shadow: 0 6px 22px rgba(139, 109, 255, 0.35);
+      }
+      .logo-mark::after {
+        content: "";
+        position: absolute;
+        inset: 2px;
+        border-radius: 8px;
+        background: rgba(8, 9, 14, 0.7);
+      }
+      .logo-mark svg { position: relative; z-index: 1; }
+      .logo h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .logo .tagline {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--r-pill);
+        font-size: 12px;
+        color: var(--text-2);
+      }
+      .status-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+        animation: pulse 1.8s infinite;
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+        70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+      }
+
+      main { max-width: 1180px; margin: 0 auto; padding: 56px 24px 96px; }
+
+      .hero { margin-bottom: 36px; }
+      .hero h2 {
+        font-size: clamp(34px, 5vw, 52px);
+        font-weight: 800;
+        line-height: 1.05;
+        letter-spacing: -0.025em;
+        margin: 0 0 16px;
+      }
+      .hero h2 .grad {
+        background: linear-gradient(115deg, var(--accent) 0%, var(--accent-2) 50%, var(--accent-3) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .hero p {
+        font-size: 16px;
+        line-height: 1.6;
+        color: var(--text-2);
+        margin: 0;
+        max-width: 620px;
+      }
+
+      .panel {
+        background: linear-gradient(180deg, var(--bg-card-strong), var(--bg-card));
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
+        position: relative;
+      }
+      .panel::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+      }
+
+      .submit-panel { margin-bottom: 28px; }
+
+      .tabs {
+        display: flex;
+        gap: 4px;
+        padding: 10px 10px 0;
+        border-bottom: 1px solid var(--border);
+        position: relative;
+      }
+      .tab {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        color: var(--text-2);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 12px 18px;
+        cursor: pointer;
+        border-radius: 10px 10px 0 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+        transition: color var(--dur-fast), background var(--dur-fast);
+      }
+      .tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
+      .tab[aria-selected="true"] {
+        color: var(--text);
+        background: var(--bg-card);
+      }
+      .tab[aria-selected="true"]::after {
+        content: "";
+        position: absolute;
+        left: 14px; right: 14px; bottom: -1px;
+        height: 2px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        border-radius: 2px;
+      }
+      .tab svg { display: block; }
+
+      .tab-panel { display: none; padding: 22px; }
+      .tab-panel[data-active] { display: block; }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .field-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .field-help {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .input {
+        width: 100%;
+        background: var(--bg-input);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        padding: 14px 16px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast);
+      }
+      .input::placeholder { color: rgba(180, 184, 196, 0.55); }
+      .input:hover { border-color: var(--border-strong); }
+      .input:focus {
+        border-color: var(--accent);
+        background: rgba(139, 109, 255, 0.08);
+        box-shadow: 0 0 0 4px rgba(139, 109, 255, 0.18);
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        appearance: none;
+        border: 0;
+        cursor: pointer;
+        font-family: inherit;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 12px 18px;
+        border-radius: var(--r-md);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: transform var(--dur-fast), box-shadow var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
+        line-height: 1;
+      }
+      .btn:active { transform: translateY(1px); }
+      .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+      .btn-primary {
+        color: white;
+        background: linear-gradient(135deg, var(--accent) 0%, #5d3ff0 100%);
+        box-shadow: 0 10px 24px rgba(139, 109, 255, 0.32);
+      }
+      .btn-primary:hover { box-shadow: 0 14px 30px rgba(139, 109, 255, 0.5); }
+      .btn-ghost {
+        background: var(--bg-card);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-ghost:hover { background: var(--bg-card-strong); border-color: var(--border-strong); }
+
+      .dropzone {
+        display: block;
+        border: 1.5px dashed var(--border-strong);
+        border-radius: var(--r-md);
+        padding: 32px 18px;
+        text-align: center;
+        color: var(--muted);
+        cursor: pointer;
+        transition: border-color var(--dur-fast), background var(--dur-fast), color var(--dur-fast);
+      }
+      .dropzone:hover, .dropzone:focus-visible, .dropzone.dragging {
+        border-color: var(--accent);
+        background: rgba(139, 109, 255, 0.06);
+        color: var(--text);
+      }
+      .dropzone strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 15px; }
+      .dropzone .hint { font-size: 12px; color: var(--muted); }
+      .dropzone input { position: absolute; opacity: 0; pointer-events: none; }
+      .dropzone svg {
+        display: block;
+        margin: 0 auto 10px;
+        opacity: 0.7;
+      }
+      .file-chip {
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--text-2);
+        font-family: "JetBrains Mono", monospace;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        padding: 8px 12px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 32px 0 16px;
+        flex-wrap: wrap;
+      }
+      .toolbar h3 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .filters {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        appearance: none;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text-2);
+        padding: 7px 14px;
+        border-radius: var(--r-pill);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+      }
+      .chip:hover { background: var(--bg-card-strong); color: var(--text); }
+      .chip[aria-pressed="true"] {
+        background: rgba(139, 109, 255, 0.16);
+        border-color: rgba(139, 109, 255, 0.45);
+        color: #d6c9ff;
+      }
+      .chip .count {
+        background: rgba(255, 255, 255, 0.08);
+        padding: 1px 7px;
+        border-radius: var(--r-pill);
+        font-size: 11px;
+      }
+      .chip[aria-pressed="true"] .count {
+        background: rgba(139, 109, 255, 0.3);
+      }
+
+      .jobs { display: flex; flex-direction: column; gap: 14px; }
+
+      .job {
+        padding: 20px 22px;
+      }
+      .job-head {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+      .job-icon {
+        width: 40px; height: 40px;
+        border-radius: 10px;
+        background: rgba(139, 109, 255, 0.1);
+        border: 1px solid rgba(139, 109, 255, 0.25);
+        color: #c4b5fd;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .job-icon.torrent { background: rgba(56, 214, 255, 0.08); border-color: rgba(56, 214, 255, 0.25); color: #67e8f9; }
+      .job-icon.url { background: rgba(255, 126, 197, 0.08); border-color: rgba(255, 126, 197, 0.25); color: #f9a8d4; }
+      .job-meta-text { min-width: 0; }
+      .job-title {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 3px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .job-num { color: var(--muted); font-weight: 500; }
+      .job-sub {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .job-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+      .badge {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 5px 10px;
+        border-radius: var(--r-pill);
+        white-space: nowrap;
+      }
+      .badge.queued { background: rgba(126, 130, 143, 0.18); color: #d3d5db; }
+      .badge.processing { background: rgba(251, 191, 36, 0.14); color: var(--warn); }
+      .badge.finalizing { background: rgba(56, 214, 255, 0.14); color: var(--info); }
+      .badge.completed { background: rgba(52, 211, 153, 0.16); color: var(--success); }
+      .badge.failed { background: rgba(251, 113, 133, 0.16); color: var(--error); }
+      .badge.paused { background: rgba(139, 109, 255, 0.18); color: #c4b5fd; }
+      .badge.canceled { background: rgba(126, 130, 143, 0.14); color: #9aa0ad; }
+
+      .btn-icon {
+        appearance: none;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border);
+        color: var(--text-2);
+        padding: 8px;
+        border-radius: var(--r-sm);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 36px;
+        min-height: 36px;
+        transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+      }
+      .btn-icon:hover { background: var(--bg-card-strong); color: var(--text); border-color: var(--border-strong); }
+      .btn-icon.danger:hover { color: var(--error); border-color: rgba(251, 113, 133, 0.5); }
+      .btn-icon svg { display: block; }
+
+      .progress {
+        height: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: var(--r-pill);
+        overflow: hidden;
+        position: relative;
+      }
+      .progress-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        background-size: 200% 100%;
+        animation: shimmer 2.6s linear infinite;
+        border-radius: var(--r-pill);
+        transition: width 0.5s ease;
+      }
+      @keyframes shimmer {
+        0% { background-position: 0% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .progress.done .progress-fill { animation: none; background: linear-gradient(90deg, var(--success), #65d6a8); }
+      .progress.paused .progress-fill { animation: none; opacity: 0.6; }
+      .progress.failed .progress-fill { background: linear-gradient(90deg, var(--error), #ea5878); animation: none; }
+
+      .meta {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--text-2);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 18px;
+      }
+      .meta-percent { color: var(--muted); font-family: "JetBrains Mono", monospace; font-size: 12px; }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-top: 16px;
+      }
+      @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+      .stat {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        padding: 12px 14px;
+      }
+      .stat-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        margin-bottom: 6px;
+        font-weight: 600;
+      }
+      .stat-value {
+        font-size: 16px;
+        font-weight: 600;
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      .files {
+        margin: 16px 0 0;
+        list-style: none;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .files li {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        font-size: 13px;
+      }
+      .files .fname {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .files .fsize {
+        color: var(--muted);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+      }
+
+      .empty {
+        text-align: center;
+        padding: 64px 20px;
+        border: 1px dashed var(--border);
+        border-radius: var(--r-lg);
+        color: var(--muted);
+      }
+      .empty-art {
+        margin: 0 auto 18px;
+        opacity: 0.7;
+      }
+      .empty-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        margin: 0 0 6px;
+      }
+      .empty p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .toast-wrap {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 50;
+        pointer-events: none;
+      }
+      .toast {
+        background: rgba(15, 17, 25, 0.94);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+        padding: 12px 16px;
+        border-radius: var(--r-md);
+        font-size: 13px;
+        animation: toast-in var(--dur) ease;
+        box-shadow: var(--shadow-lg);
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 360px;
+      }
+      .toast.error { border-color: rgba(251, 113, 133, 0.55); }
+      .toast.success { border-color: rgba(52, 211, 153, 0.55); }
+      .toast::before {
+        content: "";
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex-shrink: 0;
+      }
+      .toast.error::before { background: var(--error); }
+      .toast.success::before { background: var(--success); }
+      @keyframes toast-in {
+        from { transform: translateY(8px); opacity: 0; }
+        to { transform: none; opacity: 1; }
+      }
+
+      footer {
+        margin-top: 64px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        text-align: center;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      footer code {
+        background: var(--bg-card);
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+
+      .kbd {
+        display: inline-block;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        padding: 2px 6px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        color: var(--text-2);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .backdrop, .progress-fill, .status-dot, .toast { animation: none !important; }
+        .bg-video { display: none !important; }
+        .bg-vignette { background: rgba(6, 7, 11, 0.92); }
+        * { transition-duration: 0.001ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <a href="#main" class="skip-link">Skip to content</a>
+    <video
+      id="bgVideo"
+      class="bg-video"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="auto"
+      aria-hidden="true"
+      poster="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9'><rect width='16' height='9' fill='%2306070b'/></svg>"
+    >
+      <source src="/static/tutorial.mp4" type="video/mp4" />
+      <source src="/static/tutorial.webm" type="video/webm" />
+    </video>
+    <div class="bg-vignette" aria-hidden="true"></div>
+    <div class="backdrop" aria-hidden="true"></div>
+
+    <header class="brand">
+      <div class="brand-inner">
+        <a href="/" class="logo" aria-label="StreamBridge home">
+          <span class="logo-mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 12c4-8 12-8 16 0" />
+              <path d="M4 18c4-6 12-6 16 0" />
+              <circle cx="12" cy="12" r="1.5" fill="white" />
+            </svg>
+          </span>
+          <span>
+            <h1>StreamBridge</h1>
+            <span class="tagline">Universal media bridge</span>
+          </span>
+        </a>
+        <div class="head-actions">
+          <button
+            class="btn-icon"
+            id="toggleVideo"
+            type="button"
+            aria-pressed="true"
+            aria-label="Hide background video"
+            title="Toggle background video"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+          </button>
+          <div class="status-pill" role="status" aria-live="off">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>Service online</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <h2 id="hero-title">
+          <span class="grad">Drop a link.</span><br />Get a direct download.
+        </h2>
+        <p>
+          Magnet URIs, <code>.torrent</code> files, or any video URL — StreamBridge fetches them in the background and serves the result over short-lived signed URLs. No client app required.
+        </p>
+      </section>
+
+      <section class="panel submit-panel" aria-labelledby="submit-heading">
+        <h3 id="submit-heading" class="sr-only">Start a new download</h3>
+
+        <div class="tabs" role="tablist" aria-label="Source type">
+          <button class="tab" role="tab" id="tab-magnet" aria-selected="true" aria-controls="panel-magnet" data-tab="magnet">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M2 4h6v6"/><path d="M16 4h6v6"/></svg>
+            Magnet
+          </button>
+          <button class="tab" role="tab" id="tab-torrent" aria-selected="false" aria-controls="panel-torrent" data-tab="torrent" tabindex="-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+            Torrent file
+          </button>
+          <button class="tab" role="tab" id="tab-url" aria-selected="false" aria-controls="panel-url" data-tab="url" tabindex="-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Video URL
+          </button>
+        </div>
+
+        <div class="tab-panel" id="panel-magnet" role="tabpanel" aria-labelledby="tab-magnet" data-active>
+          <form class="field" onsubmit="event.preventDefault(); submitMagnet();">
+            <label class="field-label" for="magnet">Magnet URI</label>
+            <input id="magnet" class="input" type="text" placeholder="magnet:?xt=urn:btih:..." autocomplete="off" spellcheck="false" />
+            <div class="row">
+              <button class="btn btn-primary" type="submit">Start download</button>
+              <button class="btn btn-ghost" type="button" onclick="pasteInto('magnet')">Paste from clipboard</button>
+            </div>
+            <p class="field-help">Press <span class="kbd">Enter</span> to submit, <span class="kbd">/</span> anywhere to focus.</p>
+          </form>
+        </div>
+
+        <div class="tab-panel" id="panel-torrent" role="tabpanel" aria-labelledby="tab-torrent" hidden>
+          <div class="field">
+            <span class="field-label" id="dropzone-label">Torrent file</span>
+            <label class="dropzone" id="dropzone" tabindex="0" role="button" aria-labelledby="dropzone-label" aria-describedby="dropzone-hint">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <strong>Drop a .torrent file</strong>
+              <span class="hint" id="dropzone-hint">or click to browse · <kbd class="kbd">Space</kbd> to open picker</span>
+              <input id="torrentFile" type="file" accept=".torrent" />
+            </label>
+            <div id="fileChip" class="file-chip" hidden></div>
+            <div class="row">
+              <button class="btn btn-primary" type="button" onclick="submitTorrent()">Upload &amp; start</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-url" role="tabpanel" aria-labelledby="tab-url" hidden>
+          <form class="field" onsubmit="event.preventDefault(); submitUrl();">
+            <label class="field-label" for="videoUrl">Any video URL</label>
+            <input id="videoUrl" class="input" type="url" placeholder="youtube.com / tiktok.com / instagram.com / x.com / ..." autocomplete="off" spellcheck="false" />
+            <div class="row">
+              <button class="btn btn-primary" type="submit">Download media</button>
+              <button class="btn btn-ghost" type="button" onclick="pasteInto('videoUrl')">Paste from clipboard</button>
+            </div>
+            <p class="field-help">Powered by yt-dlp · 1800+ supported sites. Install <code>ffmpeg</code> for max-quality YouTube.</p>
+          </form>
+        </div>
+      </section>
+
+      <div class="toolbar">
+        <h3 id="jobs-heading">Jobs</h3>
+        <div class="filters" role="group" aria-label="Filter jobs">
+          <button class="chip" data-filter="all" aria-pressed="true">All <span class="count" id="count-all">0</span></button>
+          <button class="chip" data-filter="active" aria-pressed="false">Active <span class="count" id="count-active">0</span></button>
+          <button class="chip" data-filter="completed" aria-pressed="false">Completed <span class="count" id="count-completed">0</span></button>
+          <button class="chip" data-filter="failed" aria-pressed="false">Issues <span class="count" id="count-failed">0</span></button>
+          <button class="btn-icon" type="button" onclick="refreshJobs()" aria-label="Refresh jobs">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <section
+        id="jobs"
+        class="jobs"
+        aria-labelledby="jobs-heading"
+        aria-live="polite"
+        aria-busy="false"
+      ></section>
+
+      <footer>
+        Files served from <code>/api/download/&lt;signed-token&gt;</code> · tokens expire after 15 minutes
+      </footer>
+    </main>
+
+    <div class="toast-wrap" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+
+    <template id="empty-template">
+      <div class="empty">
+        <svg class="empty-art" width="80" height="80" viewBox="0 0 80 80" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="eg" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stop-color="#8b6dff" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#38d6ff" stop-opacity="0.4"/>
+            </linearGradient>
+          </defs>
+          <circle cx="40" cy="40" r="32" stroke="url(#eg)" stroke-width="1.5" stroke-dasharray="4 6"/>
+          <path d="M40 24v22M30 38l10 10 10-10" stroke="url(#eg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <line x1="26" y1="56" x2="54" y2="56" stroke="url(#eg)" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h4 class="empty-title">No downloads yet</h4>
+        <p>Pick a tab above to drop a magnet, .torrent file, or video URL.</p>
+      </div>
+    </template>
+
+    <script>
+      const eventSources = new Map();
+      const liveStats = new Map();
+      let allJobs = [];
+      let activeFilter = "all";
+
+      const TERMINAL = new Set(["completed", "failed", "canceled"]);
+      const ACTIVE = new Set(["queued", "processing", "finalizing", "paused"]);
+
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
+      const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+      // --- Toasts ---
+      function toast(msg, kind = "") {
+        const wrap = $("#toasts");
+        const el = document.createElement("div");
+        el.className = "toast " + kind;
+        el.textContent = msg;
+        wrap.appendChild(el);
+        setTimeout(() => {
+          el.style.transition = "opacity .25s, transform .25s";
+          el.style.opacity = "0";
+          el.style.transform = "translateY(6px)";
+          setTimeout(() => el.remove(), 280);
+        }, 3500);
+      }
+
+      // --- Format helpers ---
+      function fmtBytes(n) {
+        if (n == null || isNaN(n)) return "—";
+        if (n === 0) return "0 B";
+        const u = ["B","KB","MB","GB","TB"]; let i = 0;
+        while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+        return `${n.toFixed(n < 10 && i ? 1 : 0)} ${u[i]}`;
+      }
+      const fmtRate = (n) => fmtBytes(n) + "/s";
+      function fmtEta(downloaded, total, rate) {
+        if (!rate || !total || downloaded >= total) return "—";
+        const sec = (total - downloaded) / rate;
+        if (sec < 60) return `${Math.round(sec)}s`;
+        if (sec < 3600) return `${Math.round(sec / 60)}m`;
+        return `${(sec / 3600).toFixed(1)}h`;
+      }
+
+      // --- Tabs ---
+      const TAB_FOCUS_INPUT = { magnet: "#magnet", torrent: "#dropzone", url: "#videoUrl" };
+      function activateTab(name) {
+        $$('[role="tab"]').forEach((t) => {
+          const active = t.dataset.tab === name;
+          t.setAttribute("aria-selected", active ? "true" : "false");
+          t.tabIndex = active ? 0 : -1;
+        });
+        $$('.tab-panel').forEach((p) => {
+          const active = p.id === `panel-${name}`;
+          if (active) { p.setAttribute("data-active", ""); p.removeAttribute("hidden"); }
+          else { p.removeAttribute("data-active"); p.setAttribute("hidden", ""); }
+        });
+      }
+      $$('[role="tab"]').forEach((t) => {
+        t.addEventListener("click", () => activateTab(t.dataset.tab));
+        t.addEventListener("keydown", (e) => {
+          const tabs = [...$$('[role="tab"]')];
+          const i = tabs.indexOf(t);
+          if (e.key === "ArrowRight") { e.preventDefault(); tabs[(i + 1) % tabs.length].focus(); tabs[(i + 1) % tabs.length].click(); }
+          if (e.key === "ArrowLeft")  { e.preventDefault(); tabs[(i - 1 + tabs.length) % tabs.length].focus(); tabs[(i - 1 + tabs.length) % tabs.length].click(); }
+          if (e.key === "Home") { e.preventDefault(); tabs[0].focus(); tabs[0].click(); }
+          if (e.key === "End")  { e.preventDefault(); tabs[tabs.length - 1].focus(); tabs[tabs.length - 1].click(); }
+        });
+      });
+
+      // --- Submission ---
+      async function submitMagnet() {
+        const v = $("#magnet").value.trim();
+        if (!v) return toast("Paste a magnet first.", "error");
+        const fd = new FormData(); fd.append("magnet", v);
+        const r = await fetch("/api/jobs/magnet", { method: "POST", body: fd });
+        const j = await r.json();
+        if (!r.ok) return toast(j.detail || "Failed to submit magnet.", "error");
+        $("#magnet").value = "";
+        toast(`Job #${j.id} queued`, "success");
+        await refreshJobs();
+      }
+      async function submitTorrent() {
+        const f = $("#torrentFile").files[0];
+        if (!f) return toast("Pick a .torrent file first.", "error");
+        const fd = new FormData(); fd.append("torrent_file", f);
+        const r = await fetch("/api/jobs/torrent", { method: "POST", body: fd });
+        const j = await r.json();
+        if (!r.ok) return toast(j.detail || "Failed to upload.", "error");
+        $("#torrentFile").value = "";
+        const chip = $("#fileChip"); chip.hidden = true; chip.textContent = "";
+        toast(`Job #${j.id} queued`, "success");
+        await refreshJobs();
+      }
+      async function submitUrl() {
+        const v = $("#videoUrl").value.trim();
+        if (!v) return toast("Paste a URL first.", "error");
+        const fd = new FormData(); fd.append("url", v);
+        const r = await fetch("/api/jobs/url", { method: "POST", body: fd });
+        const j = await r.json();
+        if (!r.ok) return toast(j.detail || "Failed to submit URL.", "error");
+        $("#videoUrl").value = "";
+        toast(`Job #${j.id} queued`, "success");
+        await refreshJobs();
+      }
+      async function pasteInto(id) {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text) { $(`#${id}`).value = text; $(`#${id}`).focus(); }
+        } catch { toast("Clipboard not available", "error"); }
+      }
+
+      // --- Drag & drop torrent ---
+      const dz = $("#dropzone");
+      const torrentInput = $("#torrentFile");
+      const fileChip = $("#fileChip");
+      dz.addEventListener("click", (e) => { if (e.target !== torrentInput) torrentInput.click(); });
+      dz.addEventListener("keydown", (e) => {
+        if (e.key === " " || e.key === "Enter") { e.preventDefault(); torrentInput.click(); }
+      });
+      ["dragenter", "dragover"].forEach((ev) =>
+        dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("dragging"); })
+      );
+      ["dragleave", "drop"].forEach((ev) =>
+        dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("dragging"); })
+      );
+      dz.addEventListener("drop", (e) => {
+        if (e.dataTransfer.files.length) {
+          torrentInput.files = e.dataTransfer.files;
+          showFileChip();
+        }
+      });
+      torrentInput.addEventListener("change", showFileChip);
+      function showFileChip() {
+        if (!torrentInput.files.length) return;
+        const f = torrentInput.files[0];
+        fileChip.hidden = false;
+        fileChip.textContent = `${f.name} · ${fmtBytes(f.size)}`;
+      }
+
+      // --- Job state machine ---
+      function badgeClass(status) {
+        const known = ["queued","processing","finalizing","completed","failed","paused","canceled"];
+        return known.includes(status) ? status : "queued";
+      }
+      function sourceLabel(t) {
+        return t === "magnet" ? "Magnet" : t === "torrent_file" ? "Torrent" : t === "url" ? "URL" : t;
+      }
+      function sourceIconClass(t) {
+        return t === "url" ? "url" : t === "torrent_file" ? "torrent" : "";
+      }
+      function sourceIconSvg(t) {
+        if (t === "url") return '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+        if (t === "torrent_file") return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+        return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M2 4h6v6"/><path d="M16 4h6v6"/></svg>';
+      }
+      function actionsHtml(jobId, status, sourceType) {
+        if (TERMINAL.has(status)) return "";
+        const canPause = sourceType !== "url";
+        const playPause = !canPause ? "" :
+          status === "paused"
+            ? `<button type="button" class="btn-icon" onclick="resumeJob(${jobId})" aria-label="Resume job ${jobId}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              </button>`
+            : `<button type="button" class="btn-icon" onclick="pauseJob(${jobId})" aria-label="Pause job ${jobId}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+              </button>`;
+        const cancelBtn = `<button type="button" class="btn-icon danger" onclick="cancelJob(${jobId})" aria-label="Cancel job ${jobId}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>`;
+        return `<div class="actions">${playPause}${cancelBtn}</div>`;
+      }
+
+      function renderJob(j) {
+        const stats = liveStats.get(j.id) || {};
+        const progress = Number.isFinite(stats.progress) ? stats.progress : (j.progress || 0);
+        const status = stats.status || j.status;
+        const message = stats.message ?? j.message ?? "";
+        const downloaded = stats.downloaded || 0;
+        const total = stats.total_size || 0;
+        const rate = stats.download_rate || 0;
+        const peers = stats.peers || 0;
+        const seeds = stats.seeds || 0;
+
+        const progClass = ["progress"];
+        if (status === "completed") progClass.push("done");
+        if (status === "paused") progClass.push("paused");
+        if (status === "failed") progClass.push("failed");
+
+        const ariaValueText = `${progress} percent, ${status}`;
+
+        return `
+          <article class="panel job" data-job="${j.id}" data-source="${j.source_type}" data-status="${status}" aria-labelledby="job-${j.id}-title">
+            <header class="job-head">
+              <div class="job-icon ${sourceIconClass(j.source_type)}" aria-hidden="true">${sourceIconSvg(j.source_type)}</div>
+              <div class="job-meta-text">
+                <h4 class="job-title" id="job-${j.id}-title">
+                  <span class="job-num">Job #${j.id}</span>
+                  <span class="badge ${badgeClass(status)}" aria-label="Status: ${status}">${status}</span>
+                  <span class="sr-only">, source ${sourceLabel(j.source_type)}</span>
+                </h4>
+                <div class="job-sub" title="${escHtml(j.infohash)}">${escHtml(j.infohash)}</div>
+              </div>
+              <div class="job-actions">${actionsHtml(j.id, status, j.source_type)}</div>
+            </header>
+
+            <div class="${progClass.join(' ')}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}" aria-valuetext="${ariaValueText}" aria-label="Download progress for job ${j.id}">
+              <div class="progress-fill" style="width:${progress}%"></div>
+            </div>
+            <div class="meta">
+              <span class="meta-msg">${escHtml(message)}</span>
+              <span class="meta-percent">${progress}%</span>
+            </div>
+
+            <div class="stats" aria-label="Live transfer statistics">
+              <div class="stat"><div class="stat-label">Speed</div><div class="stat-value" data-stat="speed">${fmtRate(rate)}</div></div>
+              <div class="stat"><div class="stat-label">Peers · Seeds</div><div class="stat-value" data-stat="peers">${peers} · ${seeds}</div></div>
+              <div class="stat"><div class="stat-label">Downloaded</div><div class="stat-value" data-stat="downloaded">${fmtBytes(downloaded)}${total ? " / " + fmtBytes(total) : ""}</div></div>
+              <div class="stat"><div class="stat-label">ETA</div><div class="stat-value" data-stat="eta">${fmtEta(downloaded, total, rate)}</div></div>
+            </div>
+
+            <ul class="files" data-files="${j.id}" aria-label="Files for job ${j.id}"></ul>
+          </article>`;
+      }
+
+      function jobMatchesFilter(job, filter) {
+        const status = (liveStats.get(job.id) || {}).status || job.status;
+        if (filter === "all") return true;
+        if (filter === "active") return ACTIVE.has(status);
+        if (filter === "completed") return status === "completed";
+        if (filter === "failed") return status === "failed" || status === "canceled";
+        return true;
+      }
+
+      function updateCounts() {
+        const c = { all: allJobs.length, active: 0, completed: 0, failed: 0 };
+        for (const j of allJobs) {
+          const s = (liveStats.get(j.id) || {}).status || j.status;
+          if (ACTIVE.has(s)) c.active++;
+          if (s === "completed") c.completed++;
+          if (s === "failed" || s === "canceled") c.failed++;
+        }
+        $("#count-all").textContent = c.all;
+        $("#count-active").textContent = c.active;
+        $("#count-completed").textContent = c.completed;
+        $("#count-failed").textContent = c.failed;
+      }
+
+      // --- Filter chips ---
+      $$('.chip[data-filter]').forEach((b) => {
+        b.addEventListener("click", () => {
+          activeFilter = b.dataset.filter;
+          $$('.chip[data-filter]').forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+          renderJobs();
+        });
+      });
+
+      function renderJobs() {
+        const host = $("#jobs");
+        const visible = allJobs.filter((j) => jobMatchesFilter(j, activeFilter));
+        if (!visible.length) {
+          host.innerHTML = "";
+          host.appendChild($("#empty-template").content.cloneNode(true));
+          return;
+        }
+        host.innerHTML = visible.map(renderJob).join("");
+        for (const j of visible) {
+          if (j.status === "completed") loadFiles(j.id);
+          else if (!TERMINAL.has(j.status)) attachStream(j.id);
+        }
+      }
+
+      async function refreshJobs() {
+        $("#jobs").setAttribute("aria-busy", "true");
+        try {
+          const res = await fetch("/api/jobs");
+          allJobs = await res.json();
+          updateCounts();
+          renderJobs();
+        } finally {
+          $("#jobs").setAttribute("aria-busy", "false");
+        }
+      }
+
+      // --- Action endpoints ---
+      async function pauseJob(id) {
+        const r = await fetch(`/api/jobs/${id}/pause`, { method: "POST" });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); return toast(j.detail || "Pause failed", "error"); }
+        toast(`Job #${id} paused`);
+      }
+      async function resumeJob(id) {
+        const r = await fetch(`/api/jobs/${id}/resume`, { method: "POST" });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); return toast(j.detail || "Resume failed", "error"); }
+        toast(`Job #${id} resumed`);
+      }
+      async function cancelJob(id) {
+        if (!confirm(`Cancel job #${id}? Partial files will be deleted.`)) return;
+        const r = await fetch(`/api/jobs/${id}/cancel`, { method: "POST" });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); return toast(j.detail || "Cancel failed", "error"); }
+        toast(`Job #${id} canceled`);
+      }
+
+      // --- Live stream per job ---
+      function attachStream(jobId) {
+        if (eventSources.has(jobId)) return;
+        const es = new EventSource(`/api/jobs/${jobId}/events`);
+        eventSources.set(jobId, es);
+        es.addEventListener("progress", (event) => {
+          const data = JSON.parse(event.data);
+          liveStats.set(jobId, data);
+          updateJobUi(jobId, data);
+          updateCounts();
+          if (data.status === "completed") {
+            es.close(); eventSources.delete(jobId);
+            loadFiles(jobId);
+            toast(`Job #${jobId} completed`, "success");
+          } else if (data.status === "failed") {
+            es.close(); eventSources.delete(jobId);
+            toast(`Job #${jobId} failed`, "error");
+          } else if (data.status === "canceled") {
+            es.close(); eventSources.delete(jobId);
+            refreshJobs();
+          }
+        });
+        es.addEventListener("error", () => { es.close(); eventSources.delete(jobId); });
+      }
+
+      function updateJobUi(jobId, data) {
+        const card = document.querySelector(`[data-job="${jobId}"]`);
+        if (!card) return;
+        card.dataset.status = data.status;
+
+        const badge = card.querySelector(".badge");
+        const prevStatus = badge.textContent;
+        badge.textContent = data.status;
+        badge.className = "badge " + badgeClass(data.status);
+        badge.setAttribute("aria-label", `Status: ${data.status}`);
+
+        const prog = card.querySelector(".progress");
+        prog.classList.toggle("paused", data.status === "paused");
+        prog.classList.toggle("done", data.status === "completed");
+        prog.classList.toggle("failed", data.status === "failed");
+        prog.setAttribute("aria-valuenow", data.progress || 0);
+        prog.setAttribute("aria-valuetext", `${data.progress || 0} percent, ${data.status}`);
+        prog.querySelector(".progress-fill").style.width = (data.progress || 0) + "%";
+
+        card.querySelector(".meta-msg").textContent = data.message || "";
+        card.querySelector(".meta-percent").textContent = (data.progress || 0) + "%";
+
+        const v = (k) => card.querySelector(`[data-stat="${k}"]`);
+        v("speed").textContent = fmtRate(data.download_rate || 0);
+        v("peers").textContent = `${data.peers || 0} · ${data.seeds || 0}`;
+        v("downloaded").textContent = `${fmtBytes(data.downloaded || 0)}${data.total_size ? " / " + fmtBytes(data.total_size) : ""}`;
+        v("eta").textContent = fmtEta(data.downloaded || 0, data.total_size || 0, data.download_rate || 0);
+
+        if (prevStatus !== data.status) {
+          const actions = card.querySelector(".actions");
+          const sourceType = card.dataset.source;
+          const newHtml = actionsHtml(jobId, data.status, sourceType);
+          const wrap = card.querySelector(".job-actions");
+          if (actions) actions.outerHTML = newHtml;
+          else if (newHtml) wrap.innerHTML = newHtml;
+        }
+      }
+
+      async function loadFiles(jobId) {
+        const res = await fetch(`/api/jobs/${jobId}/files`);
+        if (!res.ok) return;
+        const files = await res.json();
+        const list = document.querySelector(`[data-files="${jobId}"]`);
+        if (!list) return;
+        list.innerHTML = files.map((f) => `
+          <li>
+            <span class="fname" title="${escHtml(f.filename)}">${escHtml(f.filename)}</span>
+            <span class="fsize">${fmtBytes(f.size)}</span>
+            <a href="${f.signed_url}" download aria-label="Download ${escHtml(f.filename)}">Download</a>
+          </li>`).join("");
+      }
+
+      // --- Keyboard shortcuts ---
+      document.addEventListener("keydown", (e) => {
+        if (e.target.matches("input, textarea")) return;
+        if (e.key === "/") {
+          e.preventDefault();
+          const tab = document.querySelector('[role="tab"][aria-selected="true"]').dataset.tab;
+          const sel = TAB_FOCUS_INPUT[tab];
+          if (sel) document.querySelector(sel).focus();
+        }
+      });
+
+      // --- Background video toggle ---
+      (function () {
+        const video = document.getElementById("bgVideo");
+        const btn = document.getElementById("toggleVideo");
+        const PAUSE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+        const PLAY  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+        let on = true;
+
+        function apply(state) {
+          on = state;
+          if (on) {
+            video.classList.remove("hidden");
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+            video.classList.add("hidden");
+          }
+          btn.setAttribute("aria-pressed", on ? "true" : "false");
+          btn.setAttribute("aria-label", on ? "Hide background video" : "Show background video");
+          btn.innerHTML = on ? PAUSE : PLAY;
+          try { localStorage.setItem("sb-bg-video", on ? "1" : "0"); } catch {}
+        }
+
+        btn.addEventListener("click", () => apply(!on));
+        video.addEventListener("loadeddata", () => video.classList.add("ready"));
+        video.addEventListener("canplay", () => { if (on) video.play().catch(() => {}); });
+        video.addEventListener("error", () => video.classList.add("hidden"));
+
+        try {
+          const saved = localStorage.getItem("sb-bg-video");
+          if (saved === "0") apply(false);
+        } catch {}
+      })();
+
+      // --- Initial load ---
+      refreshJobs();
+      setInterval(refreshJobs, 8000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+streambridge.db
+data/downloads/
+data/torrents/
