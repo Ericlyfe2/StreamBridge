@@ -16,7 +16,9 @@ class Job(Base):
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     message: Mapped[str] = mapped_column(String(255), default="Queued")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )

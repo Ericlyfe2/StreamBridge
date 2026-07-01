@@ -3,10 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
-class JobCreate(BaseModel):
-    magnet: str
-
-
 class JobResponse(BaseModel):
     id: int
     source_type: str
@@ -15,6 +11,7 @@ class JobResponse(BaseModel):
     progress: int
     message: str
     created_at: datetime
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True

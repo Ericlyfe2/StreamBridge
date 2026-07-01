@@ -25,6 +25,25 @@ TORRENT_DIR = DATA_DIR / "torrents"
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 TORRENT_DIR.mkdir(parents=True, exist_ok=True)
 
+_ORPHAN_STATES = frozenset({"queued", "processing", "finalizing", "paused"})
+
+
+def _fail_orphaned_jobs(db_factory) -> None:
+    db = db_factory()
+    try:
+        orphans = (
+            db.query(Job)
+            .filter(Job.status.in_(_ORPHAN_STATES))
+            .all()
+        )
+        for job in orphans:
+            job.status = "failed"
+            job.progress = 0
+            job.message = "Server restarted — job orphaned"
+        db.commit()
+    finally:
+        db.close()
+
 
 MAGNET_INFOHASH_RE = re.compile(r"xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})")
 
@@ -238,6 +257,7 @@ def _run_torrent_blocking(job_id: int, db_factory) -> None:
             _job_handles[job_id] = handle
 
         last_payload = None
+        metadata_start = time.time()
         while True:
             if job_id in _cancel_flags:
                 try:
@@ -260,6 +280,22 @@ def _run_torrent_blocking(job_id: int, db_factory) -> None:
             done = int(status.total_wanted_done)
             paused = job_id in _paused_flags
 
+            metadata_ready = status.has_metadata if hasattr(status, "has_metadata") else handle.torrent_file() is not None
+
+            if state_label == "fetching metadata" and not metadata_ready:
+                if time.time() - metadata_start > 120:
+                    job = db.get(Job, job_id)
+                    if job:
+                        job.status = "failed"
+                        job.progress = 0
+                        job.message = "Failed to fetch metadata (timeout after 120s)"
+                        db.commit()
+                    try:
+                        get_session().remove_torrent(handle)
+                    except Exception:
+                        pass
+                    return
+
             _set_stats(
                 job_id,
                 download_rate=rate,
@@ -273,7 +309,6 @@ def _run_torrent_blocking(job_id: int, db_factory) -> None:
             )
 
             finished = state_label in ("finished", "seeding") or status.is_finished
-            metadata_ready = handle.status().has_metadata if hasattr(status, "has_metadata") else handle.torrent_file() is not None
 
             if finished and metadata_ready and not paused:
                 job = db.get(Job, job_id)
@@ -420,9 +455,6 @@ def _run_url_blocking(job_id: int, db_factory) -> None:
 
     save_path = DOWNLOAD_DIR / f"job-{job_id}"
     save_path.mkdir(parents=True, exist_ok=True)
-
-    with _handles_lock:
-        _job_handles[job_id] = "url"
 
     fmt = "bestvideo*+bestaudio/best" if _HAS_FFMPEG else "best"
     ydl_opts = {

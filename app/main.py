@@ -15,6 +15,7 @@ from .schemas import JobFileResponse, JobResponse
 from .security import sign_download, verify_download_token
 from .services import (
     TORRENT_DIR,
+    _fail_orphaned_jobs,
     cancel_job,
     extract_infohash_from_magnet,
     get_job_stats,
@@ -28,6 +29,7 @@ from .services import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _fail_orphaned_jobs(SessionLocal)
     yield
 
 
